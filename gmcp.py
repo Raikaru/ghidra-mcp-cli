@@ -61,7 +61,12 @@ import sys
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
+
+# urllib.request is imported lazily inside the two functions that issue HTTP.
+# Measured on Windows/CPython 3.10: importing it costs ~55 ms, against a ~48 ms
+# bare interpreter start -- more than half this program's startup, paid by every
+# invocation including `--help`, `serve`, and every usage error. It is the single
+# largest cost in a CLI that an agent may call dozens of times per task.
 
 DEFAULT_URL = "http://127.0.0.1:8089"
 SCHEMA_TTL = 24 * 3600
@@ -80,6 +85,7 @@ def discover_url() -> str:
     every miss. Threads bring that back to one timeout.
     """
     import socket
+    import urllib.request
     from concurrent.futures import ThreadPoolExecutor
 
     ports = os.environ.get("GHIDRA_MCP_PORTS")
@@ -155,6 +161,8 @@ class Client:
         a non-JSON body is real: an older plugin build that lacks a route answers
         404 with an HTML page, which carries no `"error"` key and would otherwise
         be reported as success."""
+        import urllib.request
+
         target = self.url + "/" + path.lstrip("/")
         if query:
             target += "?" + urllib.parse.urlencode(query)
