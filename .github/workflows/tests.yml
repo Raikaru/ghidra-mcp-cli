@@ -27,4 +27,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - name: bundle the omp tool
-        run: bun build plugins/ghidra/tools/ghidra.ts --target=node --external '@oh-my-pi/*' --outfile /tmp/ghidra.js
+        run: bun build tools/ghidra.ts --target=node --external '@oh-my-pi/*' --outfile /tmp/ghidra.js
