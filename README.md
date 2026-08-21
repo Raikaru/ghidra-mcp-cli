@@ -227,7 +227,7 @@ that `list_functions` prints, and `create_function 0x…` before decompiling.
 python tests/test_gmcp.py
 ```
 
-27 tests, no Ghidra and no network: a stub server serves a `/mcp/schema` in the
+28 tests, no Ghidra and no network: a stub server serves a `/mcp/schema` in the
 real shape and echoes requests back, so the tests pin the part that is easy to
 get wrong — how a command line becomes an HTTP request.
 

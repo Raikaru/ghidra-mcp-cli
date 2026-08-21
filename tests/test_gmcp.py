@@ -245,6 +245,20 @@ class GmcpTest(unittest.TestCase):
         proc = self.gmcp("--raw-out", "raw", "GET", "/gone")
         self.assertEqual(proc.returncode, 1)
 
+    def test_usage_errors_do_not_need_a_server(self):
+        # A malformed command line must not be reported as "no instance found":
+        # that sends people hunting for a server problem they do not have.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GHIDRA_MCP_")}
+        env["GHIDRA_MCP_PORTS"] = "1 2"
+        for args in (["help"], ["raw", "GET"], ["call"]):
+            proc = subprocess.run(
+                [sys.executable, "-S", "-E", GMCP, *args],
+                capture_output=True, text=True, env=env,
+            )
+            self.assertEqual(proc.returncode, 2, f"{args}: {proc.stderr}")
+            self.assertIn("usage:", proc.stderr)
+            self.assertNotIn("no GhidraMCP instance", proc.stderr)
+
     def test_plain_text_passthrough_normalizes_crlf(self):
         proc = self.gmcp("raw", "GET", "/plain")
         self.assertEqual(proc.returncode, 0)

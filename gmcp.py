@@ -749,10 +749,16 @@ def run(argv: list[str]) -> int:
         print(__doc__)
         return 2
 
-    # serve is a local process launch, not an HTTP call: dispatch before any
-    # connection is attempted.
+    # Local-only work first: never probe for a server, or report one missing,
+    # when the command line is malformed or does not need a server at all.
     if argv[0] == "serve":
         return serve(argv[1:])
+    if argv[0] == "help" and len(argv) < 2:
+        raise Fail("usage: gmcp help <tool>   (list tools with: gmcp tools)")
+    if argv[0] == "raw" and len(argv) < 3:
+        raise Fail("usage: gmcp raw <METHOD> <path> [json-body]")
+    if argv[0] == "call" and len(argv) < 2:
+        raise Fail("usage: gmcp call <tool> [args...]")
 
     client = Client(url or discover_url(), token, timeout, verbose)
     cmd, rest = argv[0], argv[1:]
