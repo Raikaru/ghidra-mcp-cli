@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghidra-mcp-cli"
+version = "1.0.0"
+description = "Schema-driven CLI for Ghidra via the bethington/ghidra-mcp plugin: decompile, rename, retype, xrefs, scripts, headless server"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Raikaru" }]
+keywords = ["ghidra", "reverse-engineering", "decompiler", "disassembler", "mcp"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Topic :: Software Development :: Disassemblers",
+]
+# Intentionally empty. gmcp is stdlib-only; that is a feature, not an oversight.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Raikaru/ghidra-mcp-cli"
+Issues = "https://github.com/Raikaru/ghidra-mcp-cli/issues"
+"Upstream plugin" = "https://github.com/bethington/ghidra-mcp"
+
+[project.scripts]
+gmcp = "gmcp:main"
+
+[tool.setuptools]
+py-modules = ["gmcp"]

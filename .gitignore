@@ -1,0 +1,11 @@
+# Fetched build artifact of bethington/ghidra-mcp, not ours to vendor.
+dist/
+
+# Python build output
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.venv/
+
+node_modules/

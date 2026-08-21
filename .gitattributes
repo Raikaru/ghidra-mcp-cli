@@ -1,0 +1,9 @@
+# Normalise to LF in the repo. The POSIX shim MUST have LF endings: a CRLF
+# `#!/bin/sh` line makes the kernel look for an interpreter named "sh\r" and the
+# script dies with "bad interpreter". .cmd is the mirror case and wants CRLF.
+* text=auto eol=lf
+gmcp text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.cmd text eol=crlf
+*.jar binary

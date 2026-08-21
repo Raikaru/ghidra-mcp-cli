@@ -1,0 +1,27 @@
+{
+  "name": "ghidra-mcp-cli",
+  "owner": {
+    "name": "Raikaru"
+  },
+  "metadata": {
+    "description": "CLI and omp tool for driving Ghidra through the bethington/ghidra-mcp plugin",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ghidra",
+      "source": "./",
+      "description": "One tool that drives a GUI or headless Ghidra: decompile, rename, retype, comment, xrefs, structs, scripts, emulation, debugger",
+      "version": "1.0.0",
+      "category": "development",
+      "keywords": [
+        "ghidra",
+        "reverse-engineering",
+        "decompiler",
+        "mcp"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/Raikaru/ghidra-mcp-cli"
+    }
+  ]
+}

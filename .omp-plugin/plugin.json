@@ -1,0 +1,10 @@
+{
+  "name": "ghidra",
+  "version": "1.0.0",
+  "description": "Drive a GUI or headless Ghidra instance through one omp tool, backed by the bethington/ghidra-mcp REST API",
+  "author": {
+    "name": "Raikaru"
+  },
+  "license": "MIT",
+  "keywords": ["ghidra", "reverse-engineering", "decompiler", "mcp"]
+}

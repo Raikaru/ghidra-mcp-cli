@@ -1,0 +1,5 @@
+#!/bin/sh
+# -S -E: gmcp.py is stdlib-only, so skipping site-packages is free and avoids a
+# broken .pth in a user site-packages dir printing a traceback on every run.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "${GMCP_PYTHON:-python3}" -S -E "$here/gmcp.py" "$@"
