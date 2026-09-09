@@ -16,6 +16,7 @@ Commands:
   help <tool>           show a tool's parameters
   raw <METHOD> <path>   call an arbitrary path (no schema lookup)
   health                GET /mcp/health
+  import [opts]         import a binary with a named loader and its options
   serve [opts]          launch a HEADLESS Ghidra server exposing the same API
   <tool> [args...]      call a tool
 
@@ -28,7 +29,18 @@ serve options (no Ghidra GUI required; needs a Ghidra install + JDK 21):
   --ghidra DIR          Ghidra install (env GHIDRA_INSTALL_DIR / GHIDRA_HOME)
   --jar PATH            GhidraMCP jar carrying the headless server (env GMCP_JAR)
   --xmx SIZE            JVM heap                     (default 4g)
+  --loader NAME         loader for --file, by class name (e.g. GameCubeLoader)
+  --loader-opt k=value  loader option, repeatable (headless -loader-<k>)
+  --analyze             analyze after loading    (default: import only)
   --print               print the java command line and exit, do not launch
+
+import options (stock analyzeHeadless does the loading):
+  --file PATH           binary to import                 (required)
+  --project DIR         project directory to import into (required)
+  --loader NAME         loader by class name, e.g. ElfLoader
+  --loader-opt k=value  loader option, repeatable
+  --analyze             analyze after loading
+  --ghidra DIR          Ghidra install
 
   A headless server must not open a project that a running Ghidra GUI holds a
   lock on. Use a separate --project directory, or close the GUI project first.
@@ -486,6 +498,132 @@ def find_java() -> str:
     return "java"
 
 
+def loader_option_args(pairs: list[str]) -> list[str]:
+    """`key=value` pairs as headless `-loader-<key> <value>` arguments.
+
+    A loader declares its own options (Loader.getDefaultOptions) and headless
+    sets them by name. Passing them is the difference between a loader that
+    asks a question and a loader that answers it from argv: GameCubeLoader
+    opens a Swing dialog during load, so with no options it throws
+    HeadlessException before a single memory block exists.
+    """
+    args = []
+    for pair in pairs:
+        if "=" not in pair:
+            raise Fail(f"--loader-opt wants key=value, got {pair!r}")
+        key, value = pair.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise Fail(f"--loader-opt has an empty key: {pair!r}")
+        args += [f"-loader-{key}", value]
+    return args
+
+
+def project_name_for(project_dir: str) -> str:
+    """The project a directory already holds, or one named after it."""
+    import glob as _glob
+
+    existing = sorted(_glob.glob(os.path.join(project_dir, "*.gpr")))
+    if existing:
+        return os.path.splitext(os.path.basename(existing[0]))[0]
+    return os.path.basename(os.path.abspath(project_dir)) or "gmcp"
+
+
+def headless_import(ghidra: str, project_dir: str, binary: str, loader: str | None,
+                    loader_opts: list[str], analyze: bool) -> tuple[str, str, str]:
+    """Import `binary` with stock analyzeHeadless, reporting the choice it made.
+
+    The loader and the language are echoed because they are a choice: an
+    install carrying loader extensions can answer the same bytes several ways
+    -- a GameCube RSO reader claims a Game Boy Advance cartridge and yields an
+    empty PowerPC program -- and a result that does not say which loader ran
+    cannot be reproduced.
+    """
+    import subprocess
+
+    exe = os.path.join(ghidra, "support", "analyzeHeadless")
+    if not os.path.isfile(exe):
+        exe_bat = exe + ".bat"
+        if not os.path.isfile(exe_bat):
+            raise Fail(f"no analyzeHeadless in {ghidra}/support")
+        exe = exe_bat
+    os.makedirs(project_dir, exist_ok=True)
+    name = project_name_for(project_dir)
+    cmd = [exe, project_dir, name, "-import", binary]
+    if loader:
+        cmd += ["-loader", loader]
+    cmd += loader_option_args(loader_opts)
+    cmd += [] if analyze else ["-noanalysis"]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    text = (result.stdout or "") + (result.stderr or "")
+    used_loader = used_language = ""
+    for line in text.splitlines():
+        if "Using Loader:" in line:
+            used_loader = line.split("Using Loader:", 1)[1].strip()
+            used_loader = used_loader.removesuffix("(ProgramLoader)").strip()
+        elif "Using Language/Compiler:" in line:
+            used_language = line.split("Using Language/Compiler:", 1)[1].strip()
+            used_language = used_language.removesuffix("(ProgramLoader)").strip()
+    if "Invalid loader name specified" in text:
+        raise Fail(
+            f"no loader named {loader!r}: headless matches a loader's Java class "
+            "simple name, not its display name -- e.g. ElfLoader, PeLoader, "
+            "MachoLoader, GameCubeLoader, GBALoader")
+    if result.returncode != 0 or "Import failed" in text:
+        errors = [line.strip() for line in text.splitlines()
+                  if "ERROR" in line or "Exception" in line][:4]
+        raise Fail(
+            "import failed"
+            + (f" with loader {used_loader!r}" if used_loader else "")
+            + (f" as {used_language}" if used_language else "")
+            + (":\n  " + "\n  ".join(errors) if errors else ""))
+    program = os.path.basename(binary)
+    print(f"imported {program}: loader {used_loader or '?'}, "
+          f"language {used_language or '?'}", file=sys.stderr)
+    return name, program, used_loader
+
+
+def local_import(rest: list[str]) -> int:
+    """gmcp import --file PATH --project DIR [--loader NAME] [--loader-opt k=v]"""
+    binary = project_dir = ghidra_dir = None
+    loader = None
+    loader_opts: list[str] = []
+    analyze = False
+    i = 0
+    while i < len(rest):
+        arg = rest[i]
+        if arg == "--analyze":
+            analyze = True
+        elif arg in ("--file", "--project", "--ghidra", "--loader", "--loader-opt"):
+            if i + 1 >= len(rest):
+                raise Fail(f"{arg} needs a value")
+            i += 1
+            value = rest[i]
+            if arg == "--file":
+                binary = value
+            elif arg == "--project":
+                project_dir = value
+            elif arg == "--ghidra":
+                ghidra_dir = value
+            elif arg == "--loader":
+                loader = value
+            else:
+                loader_opts.append(value)
+        else:
+            raise Fail(f"import: unknown option {arg!r}")
+        i += 1
+    if not binary or not project_dir:
+        raise Fail("usage: gmcp import --file PATH --project DIR "
+                   "[--loader NAME] [--loader-opt key=value] [--analyze]")
+    if not os.path.isfile(binary):
+        raise Fail(f"no such file: {binary}")
+    ghidra = find_ghidra(ghidra_dir)
+    name, program, used = headless_import(ghidra, project_dir, binary, loader,
+                                          loader_opts, analyze)
+    print(json.dumps({"project": name, "program": program, "loader": used}))
+    return 0
+
+
 def serve(rest: list[str]) -> int:
     import glob as _glob
 
@@ -493,12 +631,27 @@ def serve(rest: list[str]) -> int:
     passthrough = {"--port", "--bind", "--project", "--program", "--file"}
     ghidra_dir = jar = None
     print_only = False
+    loader = None
+    loader_opts: list[str] = []
+    analyze = False
 
     i = 0
     while i < len(rest):
         arg = rest[i]
         if arg == "--print":
             print_only = True
+        elif arg == "--analyze":
+            analyze = True
+        elif arg == "--loader":
+            if i + 1 >= len(rest):
+                raise Fail("--loader needs a loader name")
+            i += 1
+            loader = rest[i]
+        elif arg == "--loader-opt":
+            if i + 1 >= len(rest):
+                raise Fail("--loader-opt needs key=value")
+            i += 1
+            loader_opts.append(rest[i])
         elif arg == "--ghidra":
             i += 1
             ghidra_dir = rest[i]
@@ -514,7 +667,21 @@ def serve(rest: list[str]) -> int:
             raise Fail(f"serve: unknown option {arg!r} (see gmcp --help)")
         i += 1
 
+    if (loader or loader_opts) and not opts.get("--file"):
+        raise Fail("--loader/--loader-opt only apply to an import: pass --file too")
+
     ghidra = find_ghidra(ghidra_dir)
+    # A loader choice belongs to the import, and the server's own import path
+    # takes no loader arguments: import here with stock headless, then serve
+    # the program it wrote.
+    if (loader or loader_opts) and not print_only:
+        project_dir = opts.get("--project")
+        if not project_dir:
+            raise Fail("--loader/--loader-opt need --project DIR to import into")
+        _, program, _ = headless_import(ghidra, project_dir, opts["--file"],
+                                        loader, loader_opts, analyze)
+        opts.pop("--file")
+        opts.setdefault("--program", program)
     jar_path = find_jar(jar)
 
     classpath = [jar_path]
@@ -759,6 +926,11 @@ def run(argv: list[str]) -> int:
 
     # Local-only work first: never probe for a server, or report one missing,
     # when the command line is malformed or does not need a server at all.
+    # import is a local process launch too: stock headless does the loading, so
+    # a loader and its options can be named on the command line.
+    if argv[0] == "import":
+        return local_import(argv[1:])
+
     if argv[0] == "serve":
         return serve(argv[1:])
     if argv[0] == "help" and len(argv) < 2:

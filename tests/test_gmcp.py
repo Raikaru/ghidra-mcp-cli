@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import threading
+import tempfile
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -25,6 +26,16 @@ GMCP = os.path.join(os.path.dirname(HERE), "gmcp.py")
 
 # Mirrors AnnotationScanner.generateSchema(): a "tools" array of
 # {path, method, description, category, params[{name,type,source,required,...}]}.
+def load_gmcp_module():
+    """The CLI as a module, for the pure functions that need no server."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("gmcp_under_test", GMCP)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 SCHEMA = {
     "count": 4,
     "tools": [
@@ -327,6 +338,37 @@ class GmcpTest(unittest.TestCase):
         proc = self.gmcp("serve", "--nonsense")
         self.assertEqual(proc.returncode, 2)
         self.assertIn("unknown option", proc.stderr)
+
+    # -- import / loader options -------------------------------------------
+
+    def test_loader_options_become_headless_arguments(self):
+        module = load_gmcp_module()
+        self.assertEqual(
+            module.loader_option_args(["applyRelocations=false", "blockName=a=b"]),
+            ["-loader-applyRelocations", "false", "-loader-blockName", "a=b"])
+
+    def test_loader_option_without_a_value_is_refused(self):
+        module = load_gmcp_module()
+        with self.assertRaises(module.Fail):
+            module.loader_option_args(["applyRelocations"])
+
+    def test_project_name_comes_from_an_existing_project(self):
+        module = load_gmcp_module()
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(module.project_name_for(directory),
+                             os.path.basename(directory))
+            open(os.path.join(directory, "already.gpr"), "w").close()
+            self.assertEqual(module.project_name_for(directory), "already")
+
+    def test_import_without_a_file_reports_usage(self):
+        proc = self.gmcp("import", "--project", HERE)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("usage: gmcp import", proc.stderr)
+
+    def test_serve_loader_options_need_a_file(self):
+        proc = self.gmcp("serve", "--loader", "ElfLoader", "--project", HERE)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("pass --file too", proc.stderr)
 
 
 if __name__ == "__main__":

@@ -98,6 +98,29 @@ The headless server is the *same* REST API: it is a `GhidraLaunchable`
 (`com.xebyte.headless.GhidraMCPHeadlessServer`) inside the ordinary GhidraMCP
 extension jar. Every command below works identically against either.
 
+**Importing with a chosen loader.** An install carrying loader extensions can
+answer the same bytes several ways, and the choice is not always the one you
+want: a GameCube RSO reader will claim a Game Boy Advance cartridge and yield
+an empty PowerPC program. `gmcp import` names the loader and its options, and
+prints the loader and language that were actually used:
+
+```console
+gmcp import --file game.elf --project /tmp/proj --loader ElfLoader \
+            --loader-opt imagebase=0x900000
+# imported game.elf: loader Executable and Linking Format (ELF), language MIPS:LE:32:default:default
+
+gmcp serve --file game.elf --project /tmp/proj --loader ElfLoader   # import, then serve it
+```
+
+`--loader` takes a loader's Java class simple name (`ElfLoader`, `PeLoader`,
+`GameCubeLoader`), which is what headless matches; a display name is refused
+with that explanation. `--loader-opt key=value` is repeatable and becomes
+headless' `-loader-<key> <value>`, so a loader that declares its options
+(`Loader.getDefaultOptions`) never needs to ask. A loader that opens a dialog
+instead still fails headlessly -- `GameCubeLoader` throws
+`java.awt.HeadlessException` before defining a single block -- and the failure
+now reports the loader and language it had chosen.
+
 Either way you rarely need to say *where*: with no `-u` and no `GHIDRA_MCP_URL`,
 gmcp probes loopback ports `8089-8094, 8080, 8081` concurrently and uses the
 first that identifies itself. The GUI's port is a Ghidra Tool Option and drifts
